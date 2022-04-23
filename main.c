@@ -9,6 +9,7 @@
 #include <sys/types.h>
 
 #include <ev.h>
+#include <unistd.h>
 
 #define HELPSTRING "Usage: cdemo -p [port]\n"
 #define SA struct sockaddr
@@ -37,6 +38,27 @@ long getport(int argc, char *argv[]) {
     } else {
         printf(HELPSTRING);
         exit(0);
+    }
+}
+
+#define MAX_MSG_LEN 80
+
+void echo(int connfd)
+{
+    char buff[MAX_MSG_LEN];
+    int n;
+    for (;;) {
+        bzero(buff, MAX_MSG_LEN);
+
+        read(connfd, buff, sizeof(buff));
+        printf("From client: %s", buff);
+
+        write(connfd, buff, sizeof(buff));
+
+        if (strncmp("exit", buff, 4) == 0) {
+            printf("Server received shutdown command\n");
+            break;
+        }
     }
 }
 
@@ -82,19 +104,16 @@ int main(int argc, char *argv[]) {
         printf("Server listening\n");
     len = sizeof(cli);
 
-    // Accept the data packet from client and verification
     connfd = accept(sockfd, (SA*)&cli, &len);
     if (connfd < 0) {
-        printf("server accept failed...\n");
+        printf("Accept failed\n");
         exit(0);
     }
     else
-        printf("server accept the client...\n");
+        printf("Connection accepted\n");
 
-    // Function for chatting between client and server
-    //func(connfd);
+    echo(connfd);
 
-    // After chatting close the socket
     close(sockfd);
 
     return 0;
