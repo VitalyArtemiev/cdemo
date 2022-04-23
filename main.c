@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <signal.h>
 
 #include <netdb.h>
 #include <netinet/in.h>
@@ -51,9 +52,15 @@ void echo(int connfd)
         bzero(buff, MAX_MSG_LEN);
 
         read(connfd, buff, sizeof(buff));
-        printf("From client: %s", buff);
 
+        printf("From client: %s\n", buff);
+
+        errno = 0;
         write(connfd, buff, sizeof(buff));
+        if (errno != 0) {
+            printf("Connection closed\n");
+            break;
+        }
 
         if (strncmp("exit", buff, 4) == 0) {
             printf("Server received shutdown command\n");
@@ -63,12 +70,12 @@ void echo(int connfd)
 }
 
 int main(int argc, char *argv[]) {
+    signal(SIGPIPE,SIG_IGN);
     long port = getport(argc, argv);
 
     int sockfd, connfd, len;
     struct sockaddr_in servaddr, cli;
 
-    // socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) {
         printf("Socket creation failed\n");
@@ -78,7 +85,6 @@ int main(int argc, char *argv[]) {
         printf("Socket created\n");
     bzero(&servaddr, sizeof(servaddr));
 
-    // assign IP, PORT
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     servaddr.sin_port = htons(port);
@@ -87,7 +93,6 @@ int main(int argc, char *argv[]) {
     printf("IP address: %s\n", s);
     printf("Port: %li \n", port);
 
-    // Binding newly created socket to given IP and verification
     if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) {
         printf("Socket bind failed\n");
         exit(0);
@@ -95,7 +100,6 @@ int main(int argc, char *argv[]) {
     else
         printf("Socket successfully bound\n");
 
-    // Now server is ready to listen and verification
     if ((listen(sockfd, 5)) != 0) {
         printf("Listen failed\n");
         exit(0);
