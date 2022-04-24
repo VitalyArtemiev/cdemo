@@ -3,14 +3,14 @@
 #include <errno.h>
 #include <signal.h>
 
-#include <netdb.h>
+#include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
-#include <sys/types.h>
+
+#include <pthread.h>
 
 #include <ev.h>
-#include <unistd.h>
 
 #define HELPSTRING "Usage: cdemo -p [port]\n"
 #define SA struct sockaddr
@@ -47,7 +47,6 @@ long getport(int argc, char *argv[]) {
 void echo(int connfd)
 {
     char buff[MAX_MSG_LEN];
-    int n;
     for (;;) {
         bzero(buff, MAX_MSG_LEN);
 
@@ -69,12 +68,31 @@ void echo(int connfd)
     }
 }
 
+struct sockparams {
+    int len;
+    int sockfd;
+};
+
+void* handleconnection(struct sockparams* sp) {
+    struct sockaddr_in client;
+
+    int connfd = accept(sp->sockfd, (SA*)&client, &(sp->len));
+    if (connfd < 0) {
+        printf("Accept failed\n");
+        exit(0);
+    }
+    else
+        printf("Connection accepted\n");
+
+    echo(connfd);
+}
+
 int main(int argc, char *argv[]) {
     signal(SIGPIPE,SIG_IGN);
     long port = getport(argc, argv);
 
-    int sockfd, connfd, len;
-    struct sockaddr_in servaddr, cli;
+    int sockfd;
+    struct sockaddr_in servaddr;
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) {
@@ -106,19 +124,18 @@ int main(int argc, char *argv[]) {
     }
     else
         printf("Server listening\n");
-    len = sizeof(cli);
 
-    connfd = accept(sockfd, (SA*)&cli, &len);
-    if (connfd < 0) {
-        printf("Accept failed\n");
-        exit(0);
-    }
-    else
-        printf("Connection accepted\n");
+    pthread_t id;
+    struct sockparams sp;
+    sp.sockfd = sockfd;
+    sp.len = sizeof(servaddr);
 
-    echo(connfd);
+    pthread_create(&id, NULL, handleconnection, &sp);
+
 
     close(sockfd);
+
+
 
     return 0;
 }
