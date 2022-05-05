@@ -203,15 +203,18 @@ static void cb_respond(EV_P_ struct ev_async *w, int revents) {
     switch (m.io.msg) {
         case msg_exit:
             printf("conn_loop: exit\n");
+            free(w->data);
             ev_break(conn_loop, EVBREAK_ONE);
             break;
         case msg_port:
             //need to restart thread
             printf("conn_loop: change port\n");
+            free(w->data);
             ev_break(conn_loop, EVBREAK_ONE);
             break;
         case msg_in:
             printf("Invalid msg in cb_respond\n");
+            free(w->data);
             break;
         case msg_out:
             printf("conn_loop: msg_out\n");
@@ -221,6 +224,7 @@ static void cb_respond(EV_P_ struct ev_async *w, int revents) {
                 printf("Connection closed\n");
                 break;
             }
+            free(w->data);
     }
 }
 
@@ -249,6 +253,7 @@ static void cb_msg(EV_P_ ev_async *w, int revents) {
         case msg_exit:
             printf("main_loop: exit\n");
             ev_break(main_loop, EVBREAK_ONE);
+            free(w->data);
             break;
         case msg_port: {
             printf("main_loop: port\n");
@@ -262,6 +267,7 @@ static void cb_msg(EV_P_ ev_async *w, int revents) {
             sockfd = setup_sock(m.p.port);
             pthread_create(&connthread, NULL, handle_connection, &sockfd);
         }
+            free(w->data);
             break;
         case msg_in: {
             printf("main_loop: msg_in\n");
@@ -274,10 +280,11 @@ static void cb_msg(EV_P_ ev_async *w, int revents) {
                     break;
                 }
             }
+            last;
 
             //invert string
-            for (int i = 0; i < last / 2; i++) {
-                char temp = buff[last - i];
+            for (int i = 0; i < (last+1) / 2; i++) {
+                char temp = buff[i];
                 buff[i] = buff[last - i];
                 buff[last - i] = temp;
             }
@@ -291,9 +298,11 @@ static void cb_msg(EV_P_ ev_async *w, int revents) {
             printf("Sending msg_out to conn loop\n");
             ev_async_send(conn_loop, &msg_watcher_conn);
         }
+            free(w->data);
             break;
         case msg_out:
             printf("Invalid msg in cb_msg\n");
+            free(w->data);
             break;
     }
 }
