@@ -49,7 +49,7 @@ union ev_msg {
     struct ev_in_out io;
 };
 
-long get_port(int argc, char *argv[]) {
+static long get_port(int argc, char *argv[]) {
     if (argc < 3) {
         printf(HELPSTRING);
         exit(0);
@@ -76,7 +76,7 @@ long get_port(int argc, char *argv[]) {
     }
 }
 
-int setup_sock(long port) {
+static int setup_sock(long port) {
     struct sockaddr_in servaddr;
 
     sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
@@ -112,8 +112,7 @@ int setup_sock(long port) {
 
 #define MAX_MSG_LEN 80
 
-static void
-stdin_cb(EV_P_ ev_io *w, int revents) {
+static void stdin_cb(EV_P_ ev_io *w, int revents) {
     char buff[MAX_MSG_LEN];
 
     bzero(buff, MAX_MSG_LEN);
@@ -230,7 +229,7 @@ static void cb_respond(EV_P_ struct ev_async *w, int revents) {
 
 pthread_t connthread;
 
-void *handle_connection() {
+static void *handle_connection() {
     conn_loop = ev_loop_new(0);
 
     //watch for incoming connections and pass them to main thread
@@ -266,9 +265,9 @@ static void cb_msg(EV_P_ ev_async *w, int revents) {
 
             sockfd = setup_sock(m.p.port);
             pthread_create(&connthread, NULL, handle_connection, &sockfd);
-        }
             free(w->data);
             break;
+        }
         case msg_in: {
             printf("main_loop: msg_in\n");
 
@@ -280,8 +279,6 @@ static void cb_msg(EV_P_ ev_async *w, int revents) {
                     break;
                 }
             }
-            last;
-
             //invert string
             for (int i = 0; i < (last+1) / 2; i++) {
                 char temp = buff[i];
@@ -297,16 +294,15 @@ static void cb_msg(EV_P_ ev_async *w, int revents) {
 
             printf("Sending msg_out to conn loop\n");
             ev_async_send(conn_loop, &msg_watcher_conn);
-        }
             free(w->data);
             break;
+        }
         case msg_out:
             printf("Invalid msg in cb_msg\n");
             free(w->data);
             break;
     }
 }
-
 
 int main(int argc, char *argv[]) {
     signal(SIGPIPE, SIG_IGN);
