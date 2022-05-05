@@ -21,6 +21,9 @@ static int sockfd;
 struct ev_loop *main_loop;
 struct ev_loop *conn_loop;
 
+ev_async msg_watcher_main;
+ev_async msg_watcher_conn;
+
 enum Msg {
     msg_exit, msg_port, msg_in, msg_out
 };
@@ -120,14 +123,13 @@ stdin_cb(EV_P_ ev_io *w, int revents) {
     if (strncmp("exit", buff, 4) == 0) {
         printf("Server received shutdown command\n");
 
-        ev_async signal;
         union ev_msg m;
         m.e.msg = msg_exit;
-        signal.data = &m;
+        msg_watcher_main.data = &m;
 
         printf("Sending msg_exit to main loop\n");
 
-        ev_async_send(main_loop, &signal);
+        ev_async_send(main_loop, &msg_watcher_main);
         return;
     } else if (strncmp("port", buff, 4) == 0) {
         printf("Changing port\n");
@@ -136,29 +138,29 @@ stdin_cb(EV_P_ ev_io *w, int revents) {
         char *endptr = NULL;
         errno = 0;
         long port = strtol(nptr, &endptr, 10);
-        if (nptr == endptr)
+        /*if (nptr == endptr)
             errno = 1;
         else if (errno == 0 && nptr && *endptr != 0)
-            errno = 1;
+            errno = 1;*/
 
         if (errno != 0 || port <= 0) {
-            printf("Invalid port value\n");
+            printf("errno %i \n", errno);
+            printf("Invalid port value %li \n", port);
             exit(0);
         }
 
-        ev_async signal;
         union ev_msg m;
         m.p.msg = msg_port;
         m.p.port = port;
-        signal.data = &m;
+        msg_watcher_main.data = &m;
 
         printf("Sending msg_port to main loop\n");
-        ev_async_send(main_loop, &signal);
+        ev_async_send(main_loop, &msg_watcher_main);
     }
 }
 
 static void *handle_cli() {
-    struct ev_loop *loop = EV_DEFAULT;
+    struct ev_loop *loop = ev_loop_new(0);
     ev_io stdin_watcher;
 
     ev_io_init (&stdin_watcher, stdin_cb, /*STDIN_FILENO*/ 0, EV_READ);
@@ -184,15 +186,14 @@ static void cb_accept(EV_P_ ev_io *w, int revents) {
     bzero(buff, MAX_MSG_LEN);
     read(connfd, buff, sizeof(buff));
 
-    ev_async signal;
     union ev_msg m;
     m.io.msg = msg_in;
     m.io.str = buff;
     m.io.connfd = connfd;
-    signal.data = &m;
+    msg_watcher_main.data = &m;
 
     printf("Sending msg_in to main loop\n");
-    ev_async_send(main_loop, &signal);
+    ev_async_send(main_loop, &msg_watcher_main);
 }
 
 //conn msg callback
@@ -201,16 +202,19 @@ static void cb_respond(EV_P_ struct ev_async *w, int revents) {
 
     switch (m.io.msg) {
         case msg_exit:
-            ev_break(EV_A_ EVBREAK_ONE);
+            printf("conn_loop: exit\n");
+            ev_break(conn_loop, EVBREAK_ONE);
             break;
         case msg_port:
             //need to restart thread
-            ev_break(EV_A_ EVBREAK_ONE);
+            printf("conn_loop: change port\n");
+            ev_break(conn_loop, EVBREAK_ONE);
             break;
         case msg_in:
             printf("Invalid msg in cb_respond\n");
             break;
         case msg_out:
+            printf("conn_loop: msg_out\n");
             errno = 0;
             write(m.io.connfd, m.io.str, MAX_MSG_LEN);
             if (errno != 0) {
@@ -223,32 +227,34 @@ static void cb_respond(EV_P_ struct ev_async *w, int revents) {
 pthread_t connthread;
 
 void *handle_connection() {
-    conn_loop = EV_DEFAULT;
+    conn_loop = ev_loop_new(0);
 
     //watch for incoming connections and pass them to main thread
     ev_io socket_watcher;
     ev_io_init(&socket_watcher, cb_accept, sockfd, EV_READ);
     ev_io_start(conn_loop, &socket_watcher);
 
-    ev_async msg_watcher;
-    ev_async_init(&msg_watcher, cb_respond);
-    ev_async_start(conn_loop, &msg_watcher);
+    ev_async_init(&msg_watcher_conn, cb_respond);
+    ev_async_start(conn_loop, &msg_watcher_conn);
 
     ev_run(conn_loop, 0);
 }
 
 static void cb_msg(EV_P_ ev_async *w, int revents) {
     union ev_msg m = *(union ev_msg *) w->data;
+
     switch (m.io.msg) {
         case msg_exit:
-            ev_break(EV_A_ EVBREAK_ONE);
+            printf("main_loop: exit\n");
+            ev_break(main_loop, EVBREAK_ONE);
             break;
         case msg_port: {
-            ev_async signal;
-            signal.data = &m;
+            printf("main_loop: port\n");
+
+            msg_watcher_conn.data = &m;
 
             printf("Sending msg_port to conn loop\n");
-            ev_async_send(conn_loop, &signal);
+            ev_async_send(conn_loop, &msg_watcher_conn);
             close(sockfd);
 
             sockfd = setup_sock(m.p.port);
@@ -256,6 +262,8 @@ static void cb_msg(EV_P_ ev_async *w, int revents) {
         }
             break;
         case msg_in: {
+            printf("main_loop: msg_in\n");
+
             //find last non-empty char
             char *buff = m.io.str;
             int last;
@@ -272,15 +280,14 @@ static void cb_msg(EV_P_ ev_async *w, int revents) {
                 buff[last - i] = temp;
             }
 
-            ev_async signal;
             union ev_msg mo;
             mo.io.msg = msg_out;
             mo.io.str = buff;
             mo.io.connfd = m.io.connfd;
-            signal.data = &mo;
+            msg_watcher_conn.data = &mo;
 
             printf("Sending msg_out to conn loop\n");
-            ev_async_send(conn_loop, &signal);
+            ev_async_send(conn_loop, &msg_watcher_conn);
         }
             break;
         case msg_out:
@@ -297,10 +304,9 @@ int main(int argc, char *argv[]) {
     sockfd = setup_sock(port);
     printf("Socket %i", sockfd);
 
-    main_loop = EV_DEFAULT;
-    ev_async msg_watcher;
-    ev_async_init(&msg_watcher, cb_msg);
-    ev_async_start(main_loop, &msg_watcher);
+    main_loop = ev_loop_new(0);
+    ev_async_init(&msg_watcher_main, cb_msg);
+    ev_async_start(main_loop, &msg_watcher_main);
 
     pthread_t clithread;
     pthread_create(&clithread, NULL, handle_cli, NULL);
