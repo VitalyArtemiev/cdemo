@@ -21,7 +21,9 @@ static int sockfd;
 struct ev_loop *main_loop;
 struct ev_loop *conn_loop;
 
-enum Msg {msg_exit, msg_port, msg_in, msg_out};
+enum Msg {
+    msg_exit, msg_port, msg_in, msg_out
+};
 
 struct ev_port {
     enum Msg msg;
@@ -54,7 +56,7 @@ long get_port(int argc, char *argv[]) {
         const char *nptr = argv[1];
         char *endptr = NULL;
         errno = 0;
-        long port =  strtol(argv[2], &endptr, 10);
+        long port = strtol(argv[2], &endptr, 10);
         if (nptr == endptr)
             errno = 1;
         else if (errno == 0 && nptr && *endptr != 0)
@@ -78,8 +80,7 @@ int setup_sock(long port) {
     if (sockfd == -1) {
         printf("Socket creation failed\n");
         exit(0);
-    }
-    else
+    } else
         printf("Socket created\n");
     bzero(&servaddr, sizeof(servaddr));
 
@@ -91,18 +92,16 @@ int setup_sock(long port) {
     printf("IP address: %s\n", s);
     printf("Port: %li \n", port);
 
-    if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) {
+    if ((bind(sockfd, (SA *) &servaddr, sizeof(servaddr))) != 0) {
         printf("Socket bind failed\n");
         exit(0);
-    }
-    else
+    } else
         printf("Socket successfully bound\n");
 
     if ((listen(sockfd, 5)) != 0) {
         printf("Listen failed\n");
         exit(0);
-    }
-    else
+    } else
         printf("Server listening\n");
 
     return sockfd;
@@ -111,8 +110,7 @@ int setup_sock(long port) {
 #define MAX_MSG_LEN 80
 
 static void
-stdin_cb (EV_P_ ev_io *w, int revents)
-{
+stdin_cb(EV_P_ ev_io *w, int revents) {
     char buff[MAX_MSG_LEN];
 
     bzero(buff, MAX_MSG_LEN);
@@ -137,7 +135,7 @@ stdin_cb (EV_P_ ev_io *w, int revents)
         const char *nptr = &buff[5];
         char *endptr = NULL;
         errno = 0;
-        long port =  strtol(nptr, &endptr, 10);
+        long port = strtol(nptr, &endptr, 10);
         if (nptr == endptr)
             errno = 1;
         else if (errno == 0 && nptr && *endptr != 0)
@@ -159,31 +157,30 @@ stdin_cb (EV_P_ ev_io *w, int revents)
     }
 }
 
-void* handle_cli(){
+static void *handle_cli() {
     struct ev_loop *loop = EV_DEFAULT;
     ev_io stdin_watcher;
 
     ev_io_init (&stdin_watcher, stdin_cb, /*STDIN_FILENO*/ 0, EV_READ);
-    ev_io_start (loop, &stdin_watcher);
+    ev_io_start(loop, &stdin_watcher);
 
-    ev_run (loop, 0);
+    ev_run(loop, 0);
 }
 
 //conn socket callback
 static void cb_accept(EV_P_ ev_io *w, int revents) {
     struct sockaddr_in client;
 
-    int len = sizeof(client);
+    unsigned int len = sizeof(client);
 
-    int connfd = accept(w->fd, (SA*)&client, &len);
+    int connfd = accept(w->fd, (SA *) &client, &len);
     if (connfd < 0) {
         printf("Accept failed\n");
         exit(0);
-    }
-    else
+    } else
         printf("Connection accepted\n");
 
-    char* buff = malloc(MAX_MSG_LEN);
+    char *buff = malloc(MAX_MSG_LEN);
     bzero(buff, MAX_MSG_LEN);
     read(connfd, buff, sizeof(buff));
 
@@ -199,16 +196,16 @@ static void cb_accept(EV_P_ ev_io *w, int revents) {
 }
 
 //conn msg callback
-static void cb_respond(EV_P_ ev_io *w, int revents) {
-    union ev_msg m = *(union ev_msg*) w->data;
+static void cb_respond(EV_P_ struct ev_async *w, int revents) {
+    union ev_msg m = *(union ev_msg *) w->data;
 
     switch (m.io.msg) {
         case msg_exit:
-            ev_break (EV_A_ EVBREAK_ONE);
+            ev_break(EV_A_ EVBREAK_ONE);
             break;
         case msg_port:
             //need to restart thread
-            ev_break (EV_A_ EVBREAK_ONE);
+            ev_break(EV_A_ EVBREAK_ONE);
             break;
         case msg_in:
             printf("Invalid msg in cb_respond\n");
@@ -225,7 +222,7 @@ static void cb_respond(EV_P_ ev_io *w, int revents) {
 
 pthread_t connthread;
 
-void* handle_connection() {
+void *handle_connection() {
     conn_loop = EV_DEFAULT;
 
     //watch for incoming connections and pass them to main thread
@@ -241,7 +238,7 @@ void* handle_connection() {
 }
 
 static void cb_msg(EV_P_ ev_async *w, int revents) {
-    union ev_msg m = *(union ev_msg*) w->data;
+    union ev_msg m = *(union ev_msg *) w->data;
     switch (m.io.msg) {
         case msg_exit:
             ev_break(EV_A_ EVBREAK_ONE);
@@ -260,9 +257,9 @@ static void cb_msg(EV_P_ ev_async *w, int revents) {
             break;
         case msg_in: {
             //find last non-empty char
-            char* buff = m.io.str;
+            char *buff = m.io.str;
             int last;
-            for (last = MAX_MSG_LEN - 1; last > 1 ; last--) {
+            for (last = MAX_MSG_LEN - 1; last > 1; last--) {
                 if (buff[last] != 0) {
                     break;
                 }
@@ -294,7 +291,7 @@ static void cb_msg(EV_P_ ev_async *w, int revents) {
 
 
 int main(int argc, char *argv[]) {
-    signal(SIGPIPE,SIG_IGN);
+    signal(SIGPIPE, SIG_IGN);
     long port = get_port(argc, argv);
 
     sockfd = setup_sock(port);
