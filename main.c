@@ -123,9 +123,9 @@ stdin_cb(EV_P_ ev_io *w, int revents) {
     if (strncmp("exit", buff, 4) == 0) {
         printf("Server received shutdown command\n");
 
-        union ev_msg m;
-        m.e.msg = msg_exit;
-        msg_watcher_main.data = &m;
+        union ev_msg* m = malloc(sizeof(union ev_msg));
+        m->e.msg = msg_exit;
+        msg_watcher_main.data = m;
 
         printf("Sending msg_exit to main loop\n");
 
@@ -149,10 +149,10 @@ stdin_cb(EV_P_ ev_io *w, int revents) {
             exit(0);
         }
 
-        union ev_msg m;
-        m.p.msg = msg_port;
-        m.p.port = port;
-        msg_watcher_main.data = &m;
+        union ev_msg* m = malloc(sizeof(union ev_msg));
+        m->p.msg = msg_port;
+        m->p.port = port;
+        msg_watcher_main.data = m;
 
         printf("Sending msg_port to main loop\n");
         ev_async_send(main_loop, &msg_watcher_main);
@@ -186,11 +186,11 @@ static void cb_accept(EV_P_ ev_io *w, int revents) {
     bzero(buff, MAX_MSG_LEN);
     read(connfd, buff, sizeof(buff));
 
-    union ev_msg m;
-    m.io.msg = msg_in;
-    m.io.str = buff;
-    m.io.connfd = connfd;
-    msg_watcher_main.data = &m;
+    union ev_msg* m = malloc(sizeof(union ev_msg));
+    m->io.msg = msg_in;
+    m->io.str = buff;
+    m->io.connfd = connfd;
+    msg_watcher_main.data = m;
 
     printf("Sending msg_in to main loop\n");
     ev_async_send(main_loop, &msg_watcher_main);
@@ -243,6 +243,8 @@ void *handle_connection() {
 static void cb_msg(EV_P_ ev_async *w, int revents) {
     union ev_msg m = *(union ev_msg *) w->data;
 
+    printf("cb_msg\n");
+
     switch (m.io.msg) {
         case msg_exit:
             printf("main_loop: exit\n");
@@ -280,11 +282,11 @@ static void cb_msg(EV_P_ ev_async *w, int revents) {
                 buff[last - i] = temp;
             }
 
-            union ev_msg mo;
-            mo.io.msg = msg_out;
-            mo.io.str = buff;
-            mo.io.connfd = m.io.connfd;
-            msg_watcher_conn.data = &mo;
+            union ev_msg* mo = malloc(sizeof(union ev_msg));
+            mo->io.msg = msg_out;
+            mo->io.str = buff;
+            mo->io.connfd = m.io.connfd;
+            msg_watcher_conn.data = mo;
 
             printf("Sending msg_out to conn loop\n");
             ev_async_send(conn_loop, &msg_watcher_conn);
