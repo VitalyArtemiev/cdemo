@@ -306,7 +306,7 @@ int main(int argc, char *argv[]) {
     ev_async_start(main_loop, &msg_watcher);
 
     pthread_t clithread;
-    //pthread_create(&clithread, NULL, handle_cli, NULL);
+    pthread_create(&clithread, NULL, handle_cli, NULL);
 
     pthread_create(&connthread, NULL, handle_connection, NULL);
 
